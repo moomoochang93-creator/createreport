@@ -363,6 +363,7 @@
         updateTotal();
     }
 
+    // 計算總計
     function updateTotal() {
         let total = 0;
         document.querySelectorAll(".p-amount").forEach(field => {
@@ -371,21 +372,36 @@
         document.getElementById("totalDisplay").innerText = total.toLocaleString();
     }
 
-    // ================= 核心輔助函式：跨平台跨裝置下載邏輯 =================
-    function handleDownload(url, fileName) {
+    // ================= 核心：完美修正 iOS 手機平板無法下載的邏輯 =================
+    function handleCrossPlatformFile(blob, fileName, mimeType) {
         const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
         
         if (isIOS) {
-            // iOS 裝置：直接跳轉網址列開啟檔案，讓使用者能長按儲存或使用分享按鈕傳至 LINE/檔案 App
-            window.location.href = url;
+            // iOS 特別優化：將 Blob 轉為 Reader 讀取的 DataURL 後直接在新視窗打開
+            const reader = new FileReader();
+            reader.onloadend = function() {
+                const dataUrl = reader.result;
+                // 用新視窗/新分頁展示此檔案流，iOS 使用者即可點右上角「分享」傳到 LINE 或是「儲存到檔案」
+                const newWindow = window.open();
+                if (newWindow) {
+                    newWindow.document.write(`<iframe src="${dataUrl}" frameborder="0" style="border:0; top:0px; left:0px; bottom:0px; right:0px; width:100%; height:100%;" allowfullscreen></iframe>`);
+                    newWindow.document.title = fileName;
+                } else {
+                    // 若被彈出視窗阻擋，則降級使用當前頁面導向
+                    window.location.href = dataUrl;
+                }
+            };
+            reader.readAsDataURL(blob);
         } else {
-            // 電腦或 Android 裝置：標準隱藏節點點擊下載
+            // 電腦、Mac、Android：使用標準隱藏節點強制自動下載
+            const url = URL.createObjectURL(blob);
             const link = document.createElement('a');
             link.href = url;
             link.download = fileName;
             document.body.appendChild(link);
             link.click();
             document.body.removeChild(link);
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
         }
     }
 
@@ -467,10 +483,8 @@
         
         const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
         const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
-        const url = URL.createObjectURL(blob);
         
-        handleDownload(url, `${clientName || '客戶'}_報價單.xlsx`);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        handleCrossPlatformFile(blob, `${clientName || '客戶'}_報價單.xlsx`, 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     }
 
     // ================= 共用：建立排版 HTML 內容 =================
@@ -503,12 +517,12 @@
             itemRowsHtml += `
                 <tr>
                     <td style="border:1px solid #999;padding:6px;text-align:center;">${idx + 1}</td>
-                    <td style="border:1px solid #999;padding:6px;text-align:center;">${escapeHtml(name)}</td>
+                    <td style="border:1px solid #999;padding:6px;text-align:left;">${escapeHtml(name)}</td>
                     <td style="border:1px solid #999;padding:6px;text-align:center;">${escapeHtml(spec)}</td>
                     <td style="border:1px solid #999;padding:6px;text-align:center;">${escapeHtml(qty)}</td>
-                    <td style="border:1px solid #999;padding:6px;text-align:center;">${priceDisplay}</td>
-                    <td style="border:1px solid #999;padding:6px;text-align:center;">${amount.toLocaleString()}</td>
-                    <td style="border:1px solid #999;padding:6px;text-align:center;">${escapeHtml(note)}</td>
+                    <td style="border:1px solid #999;padding:6px;text-align:right;">${priceDisplay}</td>
+                    <td style="border:1px solid #999;padding:6px;text-align:right;">${amount.toLocaleString()}</td>
+                    <td style="border:1px solid #999;padding:6px;text-align:left;">${escapeHtml(note)}</td>
                 </tr>`;
         });
 
@@ -544,20 +558,20 @@
                 <table style="width:100%;border-collapse:collapse;font-size:13px;">
                     <thead>
                         <tr style="background:#f0f0f0;">
-                            <th style="border:1px solid #999;padding:6px;">編號</th>
-                            <th style="border:1px solid #999;padding:6px;">品名</th>
-                            <th style="border:1px solid #999;padding:6px;">規格</th>
-                            <th style="border:1px solid #999;padding:6px;">數量</th>
-                            <th style="border:1px solid #999;padding:6px;">單價</th>
-                            <th style="border:1px solid #999;padding:6px;">金額</th>
-                            <th style="border:1px solid #999;padding:6px;">備註</th>
+                            <th style="border:1px solid #999;padding:6px;width:6%;">編號</th>
+                            <th style="border:1px solid #999;padding:6px;width:32%;">品名</th>
+                            <th style="border:1px solid #999;padding:6px;width:15%;">規格</th>
+                            <th style="border:1px solid #999;padding:6px;width:10%;">數量</th>
+                            <th style="border:1px solid #999;padding:6px;width:12%;">單價</th>
+                            <th style="border:1px solid #999;padding:6px;width:13%;">金額</th>
+                            <th style="border:1px solid #999;padding:6px;width:12%;">備註</th>
                         </tr>
                     </thead>
                     <tbody>${itemRowsHtml}</tbody>
                     <tfoot>
                         <tr>
                             <td colspan="5" style="border:1px solid #999;padding:6px;text-align:center;background:#fffaf0;"><b>合 計</b></td>
-                            <td style="border:1px solid #999;padding:6px;text-align:center;background:#fffaf0;color:#c53030;"><b>$${grandTotal.toLocaleString()}</b></td>
+                            <td style="border:1px solid #999;padding:6px;text-align:right;background:#fffaf0;color:#c53030;"><b>$${grandTotal.toLocaleString()}</b></td>
                             <td style="border:1px solid #999;padding:6px;background:#fffaf0;"></td>
                         </tr>
                     </tfoot>
@@ -584,10 +598,7 @@
 </html>`;
 
         const blob = new Blob(['\ufeff', fullHtml], { type: 'application/msword' });
-        const url = URL.createObjectURL(blob);
-        
-        handleDownload(url, `${clientName}_報價單.doc`);
-        setTimeout(() => URL.revokeObjectURL(url), 1000);
+        handleCrossPlatformFile(blob, `${clientName}_報價單.doc`, 'application/msword');
     }
 
     // ================= 輸出成圖片 (JPG) =================
@@ -608,9 +619,10 @@
         document.body.appendChild(container);
 
         html2canvas(container.firstElementChild, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
-            const url = canvas.toDataURL('image/jpeg', 0.95);
-            handleDownload(url, `${clientName}_報價單.jpg`);
-            document.body.removeChild(container);
+            canvas.toBlob(function(blob) {
+                handleCrossPlatformFile(blob, `${clientName}_報價單.jpg`, 'image/jpeg');
+                document.body.removeChild(container);
+            }, 'image/jpeg', 0.95);
         }).catch(err => {
             alert('圖片匯出失敗：' + err.message);
             document.body.removeChild(container);
