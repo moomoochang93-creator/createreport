@@ -33,7 +33,7 @@
             color: #1a202c;
         }
         
-        /* 可修改的基本資訊區 */
+        /* 基本資訊區 */
         .info-section {
             display: grid;
             grid-template-columns: repeat(2, 1fr);
@@ -64,7 +64,7 @@
         }
         .full-width { grid-column: span 2; }
 
-        /* 日期輸入：文字框 + 隱藏的原生日期選擇器 + 日曆按鈕 */
+        /* 日期輸入 */
         .date-input-wrap {
             flex: 1;
             display: flex;
@@ -155,7 +155,7 @@
         }
         .btn-export:hover { background-color: #2c5282; }
 
-        /* 表格外層容器：手機上表格太寬時可以左右滑動，不會把整個版面撐壞 */
+        /* 表格外層滾動容器 */
         .table-scroll {
             width: 100%;
             overflow-x: auto;
@@ -164,13 +164,12 @@
         }
         .table-scroll table { margin-bottom: 0; }
 
-        /* ================= 手機版 RWD ================= */
+        /* 手機版 RWD */
         @media (max-width: 768px) {
             body { padding: 10px; }
             .container { padding: 16px; }
             .title-main { font-size: 20px; letter-spacing: 6px; }
 
-            /* 客戶資訊區在手機上改成單欄，欄位標籤與輸入框上下排列避免擠壓 */
             .info-section {
                 grid-template-columns: 1fr;
                 padding: 14px;
@@ -188,10 +187,8 @@
             .control-panel { flex-wrap: wrap; gap: 8px; }
             .btn-add { width: 100%; }
 
-            /* 明細表格在手機上維持原本欄寬，靠外層 .table-scroll 左右滑動查看 */
             #itemTable { min-width: 680px; }
 
-            /* 三個匯出按鈕在手機上改成直向排列，避免文字擠成一團 */
             .export-buttons { flex-direction: column; }
         }
     </style>
@@ -201,7 +198,7 @@
 <div class="container">
     <h2 class="title-main">報 價 單</h2>
     
-    <!-- 1. 可修改的基本資料區 (有預設值，且隨時能改) -->
+    <!-- 1. 基本資料區 -->
     <div class="info-section">
         <div class="form-group">
             <label>客戶名稱：</label>
@@ -272,7 +269,7 @@
     </table>
     </div>
 
-    <!-- 4. 底部聯絡人區 (同樣可修改) -->
+    <!-- 4. 底部聯絡人區 -->
     <div class="info-section" style="margin-bottom: 10px;">
         <div class="form-group">
             <label>聯絡人：</label>
@@ -297,21 +294,18 @@
     const rocYear = today.getFullYear() - 1911;
     document.getElementById("quoteDate").value = `${rocYear}年${today.getMonth() + 1}月${today.getDate()}日`;
 
-    // 開啟原生日曆選擇器（點日曆圖示按鈕觸發）
+    // 開啟原生日曆選擇器
     function openDatePicker() {
         const picker = document.getElementById("quoteDatePicker");
         if (picker.showPicker) {
-            // Chrome / Edge 等支援 showPicker()，直接跳出日曆
             picker.showPicker();
         } else {
-            // 舊版瀏覽器的備援方式
             picker.focus();
             picker.click();
         }
     }
 
-    // 使用者用日曆選好日期後，轉換成民國年格式寫回文字輸入框
-    // （寫回文字框而不是鎖住欄位，所以使用者之後仍可以直接手動修改文字）
+    // 轉換成民國年格式寫回文字輸入框
     function onDatePicked(dateStr) {
         if (!dateStr) return;
         const d = new Date(dateStr + "T00:00:00");
@@ -326,12 +320,11 @@
         });
     }
 
-    // 新增資料列 (支援單價留空)
+    // 新增資料列
     function addRow(data = {}) {
         const tbody = document.getElementById("itemTbody");
         const tr = document.createElement("tr");
         
-        // 如果單價是 0 且沒有特別輸入，畫面上就留空不顯示 0
         const priceVal = (data.price === 0 || data.price === undefined) ? '' : data.price;
 
         tr.innerHTML = `
@@ -356,9 +349,6 @@
         updateTotal();
     }
 
-    // 計算核心：修正——原本不管單價有沒有填都會覆蓋金額欄位（並設成 readonly），
-    // 導致單價留空時金額永遠是 0 且無法手動輸入。
-    // 現在改成：只有「單價有填」時才自動計算覆蓋金額；單價留空時金額欄位可自由手動輸入。
     function calculateRow(input) {
         const row = input.closest("tr");
         const qtyText = row.querySelector(".p-qty").value;
@@ -370,7 +360,6 @@
             const price = parseFloat(priceInput) || 0;
             row.querySelector(".p-amount").value = Math.round(qtyParsed * price);
         }
-        // 單價留空時，不動金額欄位，保留使用者手動輸入的值
         updateTotal();
     }
 
@@ -382,9 +371,32 @@
         document.getElementById("totalDisplay").innerText = total.toLocaleString();
     }
 
+    // ================= 核心輔助函式：跨平台跨裝置下載邏輯 =================
+    function handleDownload(url, fileName) {
+        const isIOS = /iPhone|iPad|iPod/i.test(navigator.userAgent);
+        
+        if (isIOS) {
+            // iOS 裝置：直接跳轉網址列開啟檔案，讓使用者能長按儲存或使用分享按鈕傳至 LINE/檔案 App
+            window.location.href = url;
+        } else {
+            // 電腦或 Android 裝置：標準隱藏節點點擊下載
+            const link = document.createElement('a');
+            link.href = url;
+            link.download = fileName;
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+        }
+    }
+
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.innerText = str == null ? '' : str;
+        return div.innerHTML;
+    }
+
     // ================= EXCEL 動態取值匯出邏輯 =================
     function exportToExcel() {
-        // 從畫面的輸入框「動態抓取」最新文字，改過什麼就匯出什麼！
         const clientName = document.getElementById("clientName").value;
         const quoteDate = document.getElementById("quoteDate").value;
         const subClient = document.getElementById("subClient").value;
@@ -452,18 +464,16 @@
 
         const wb = XLSX.utils.book_new();
         XLSX.utils.book_append_sheet(wb, ws, "報價單明細");
-        XLSX.writeFile(wb, `${clientName || '客戶'}_報價單.xlsx`);
+        
+        const wbout = XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+        const blob = new Blob([wbout], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const url = URL.createObjectURL(blob);
+        
+        handleDownload(url, `${clientName || '客戶'}_報價單.xlsx`);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
-    // 避免使用者輸入的文字被當成 HTML 標籤解析
-    function escapeHtml(str) {
-        const div = document.createElement('div');
-        div.innerText = str == null ? '' : str;
-        return div.innerHTML;
-    }
-
-    // ================= 共用：把畫面上的資料組成一份排版好的報價單 HTML =================
-    // Word 匯出跟 JPG 圖片匯出都共用這份內容，確保兩邊排版一致
+    // ================= 共用：建立排版 HTML 內容 =================
     function buildQuoteDocumentHTML() {
         const clientName = document.getElementById("clientName").value;
         const quoteDate = document.getElementById("quoteDate").value;
@@ -564,7 +574,6 @@
     }
 
     // ================= 輸出成 Word (.doc) =================
-    // 用 Word 認得的 HTML 格式包裝後存成 .doc，Word / WPS / LibreOffice 都能直接開啟編輯
     function exportToWord() {
         const clientName = document.getElementById("clientName").value || '客戶';
         const contentHtml = buildQuoteDocumentHTML();
@@ -575,13 +584,10 @@
 </html>`;
 
         const blob = new Blob(['\ufeff', fullHtml], { type: 'application/msword' });
-        const link = document.createElement('a');
-        link.href = URL.createObjectURL(blob);
-        link.download = `${clientName}_報價單.doc`;
-        document.body.appendChild(link);
-        link.click();
-        document.body.removeChild(link);
-        URL.revokeObjectURL(link.href);
+        const url = URL.createObjectURL(blob);
+        
+        handleDownload(url, `${clientName}_報價單.doc`);
+        setTimeout(() => URL.revokeObjectURL(url), 1000);
     }
 
     // ================= 輸出成圖片 (JPG) =================
@@ -594,7 +600,6 @@
         const clientName = document.getElementById("clientName").value || '客戶';
         const contentHtml = buildQuoteDocumentHTML();
 
-        // 建立一個畫面外的容器來畫圖，不影響現有頁面
         const container = document.createElement('div');
         container.style.position = 'fixed';
         container.style.left = '-9999px';
@@ -603,12 +608,8 @@
         document.body.appendChild(container);
 
         html2canvas(container.firstElementChild, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
-            const link = document.createElement('a');
-            link.download = `${clientName}_報價單.jpg`;
-            link.href = canvas.toDataURL('image/jpeg', 0.95);
-            document.body.appendChild(link);
-            link.click();
-            document.body.removeChild(link);
+            const url = canvas.toDataURL('image/jpeg', 0.95);
+            handleDownload(url, `${clientName}_報價單.jpg`);
             document.body.removeChild(container);
         }).catch(err => {
             alert('圖片匯出失敗：' + err.message);
