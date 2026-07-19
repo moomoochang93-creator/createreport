@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="zh-TW">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>報價單系統</title>
+    <!-- 引入 SheetJS 核心庫 -->
+    <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+    <!-- 引入 html2canvas，用於輸出 JPG 圖片 -->
+    <script src="https://cdn.jsdelivr.net/npm/html2canvas@1.4.1/dist/html2canvas.min.js"></script>
+    <style>
+        body {
+            font-family: "Helvetica Neue", Helvetica, Arial, "Microsoft JhengHei", sans-serif;
+            background-color: #eaeef3;
+            margin: 0;
+            padding: 20px;
+            color: #2d3748;
+        }
+        .container {
+            max-width: 1000px;
+            margin: 0 auto;
+            background: #fff;
+            padding: 40px;
+            border-radius: 8px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+        }
+        .title-main {
+            text-align: center;
+            font-size: 28px;
+            font-weight: bold;
+            letter-spacing: 12px;
+            margin: 0 0 20px 0;
+            color: #1a202c;
+        }
+        
+        /* 可修改的基本資訊區 */
+        .info-section {
+            display: grid;
+            grid-template-columns: repeat(2, 1fr);
+            gap: 12px;
+            margin-bottom: 25px;
+            background: #f7fafc;
+            padding: 20px;
+            border: 1px solid #e2e8f0;
+            border-radius: 6px;
+        }
+        .form-group {
+            display: flex;
+            align-items: center;
+        }
+        .form-group label {
+            width: 90px;
+            font-size: 14px;
+            color: #4a5568;
+            font-weight: bold;
+        }
+        .form-group input {
+            flex: 1;
+            padding: 6px 10px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            font-size: 14px;
+            background-color: #fff;
+        }
+        .full-width { grid-column: span 2; }
+
+        /* 日期輸入：文字框 + 隱藏的原生日期選擇器 + 日曆按鈕 */
+        .date-input-wrap {
+            flex: 1;
+            display: flex;
+            gap: 6px;
+            position: relative;
+        }
+        .date-input-wrap input[type="text"] {
+            flex: 1;
+        }
+        .date-picker-hidden {
+            position: absolute;
+            width: 1px;
+            height: 1px;
+            opacity: 0;
+            left: 0;
+            top: 0;
+        }
+        .btn-calendar {
+            padding: 6px 10px;
+            border: 1px solid #cbd5e0;
+            border-radius: 4px;
+            background: #fff;
+            cursor: pointer;
+            font-size: 14px;
+            flex-shrink: 0;
+        }
+        .btn-calendar:hover { background: #f7fafc; }
+
+        /* 控制面板 */
+        .control-panel {
+            display: flex;
+            justify-content: flex-start;
+            align-items: center;
+            margin-bottom: 15px;
+            background: #edf2f7;
+            padding: 12px;
+            border-radius: 6px;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            margin-bottom: 25px;
+        }
+        th, td {
+            border: 1px solid #cbd5e0;
+            padding: 10px;
+            text-align: center;
+        }
+        th { background-color: #f7fafc; color: #4a5568; font-size: 14px; }
+        td input {
+            width: 95%;
+            padding: 6px;
+            border: 1px solid #e2e8f0;
+            border-radius: 4px;
+            box-sizing: border-box;
+            text-align: center;
+            font-size: 14px;
+        }
+        td input.align-left { text-align: left; }
+        td input[readonly] { background-color: #f7fafc; border: none; font-weight: bold; }
+        
+        .btn {
+            padding: 8px 16px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+        }
+        .btn-add { background-color: #48bb78; color: white; }
+        .btn-add:hover { background-color: #38a169; }
+        .btn-delete { background-color: #f56565; color: white; padding: 4px 8px; }
+        .btn-delete:hover { background-color: #e53e3e; }
+        
+        .total-row { font-size: 16px; font-weight: bold; background-color: #fffaf0; }
+        
+        .btn-export {
+            background-color: #2b6cb0;
+            color: white;
+            font-size: 18px;
+            display: block;
+            width: 100%;
+            padding: 14px;
+            border-radius: 6px;
+            margin-top: 20px;
+            font-weight: bold;
+        }
+        .btn-export:hover { background-color: #2c5282; }
+
+        /* 表格外層容器：手機上表格太寬時可以左右滑動，不會把整個版面撐壞 */
+        .table-scroll {
+            width: 100%;
+            overflow-x: auto;
+            -webkit-overflow-scrolling: touch;
+            margin-bottom: 25px;
+        }
+        .table-scroll table { margin-bottom: 0; }
+
+        /* ================= 手機版 RWD ================= */
+        @media (max-width: 768px) {
+            body { padding: 10px; }
+            .container { padding: 16px; }
+            .title-main { font-size: 20px; letter-spacing: 6px; }
+
+            /* 客戶資訊區在手機上改成單欄，欄位標籤與輸入框上下排列避免擠壓 */
+            .info-section {
+                grid-template-columns: 1fr;
+                padding: 14px;
+                gap: 10px;
+            }
+            .form-group {
+                flex-direction: column;
+                align-items: flex-start;
+                gap: 4px;
+            }
+            .form-group label { width: auto; text-align: left; }
+            .form-group input { width: 100%; box-sizing: border-box; }
+            .date-input-wrap { width: 100%; }
+
+            .control-panel { flex-wrap: wrap; gap: 8px; }
+            .btn-add { width: 100%; }
+
+            /* 明細表格在手機上維持原本欄寬，靠外層 .table-scroll 左右滑動查看 */
+            #itemTable { min-width: 680px; }
+
+            /* 三個匯出按鈕在手機上改成直向排列，避免文字擠成一團 */
+            .export-buttons { flex-direction: column; }
+        }
+    </style>
+</head>
+<body>
+
+<div class="container">
+    <h2 class="title-main">報 價 單</h2>
+    
+    <!-- 1. 可修改的基本資料區 (有預設值，且隨時能改) -->
+    <div class="info-section">
+        <div class="form-group">
+            <label>客戶名稱：</label>
+            <input type="text" id="clientName" value="高名陽明領袖學院">
+        </div>
+        <div class="form-group">
+            <label>報價日期：</label>
+            <div class="date-input-wrap">
+                <input type="text" id="quoteDate" placeholder="可手動輸入，或點右側日曆選擇">
+                <input type="date" id="quoteDatePicker" class="date-picker-hidden" onchange="onDatePicked(this.value)">
+                <button type="button" class="btn-calendar" onclick="openDatePicker()" title="選擇日期">📅</button>
+            </div>
+        </div>
+        <div class="form-group full-width">
+            <label>分班名稱：</label>
+            <input type="text" id="subClient" value="高雄市私立高名文理短期補習班義華分班">
+        </div>
+        <div class="form-group full-width">
+            <label>通訊地址：</label>
+            <input type="text" id="address" value="高雄市三民區義華路197號（國中部）">
+        </div>
+        <div class="form-group">
+            <label>電話 TEL：</label>
+            <input type="text" id="tel" value="3802999">
+        </div>
+        <div class="form-group">
+            <label>傳真 Fax：</label>
+            <input type="text" id="fax" value="3987129">
+        </div>
+        <div class="form-group">
+            <label>統一編號：</label>
+            <input type="text" id="taxId" value="21389724">
+        </div>
+    </div>
+
+    <!-- 2. 控制面板 -->
+    <div class="control-panel">
+        <button type="button" class="btn btn-add" onclick="addRow()">＋ 手動新增明細</button>
+    </div>
+
+    <!-- 3. 輸入明細表格 -->
+    <div class="table-scroll">
+    <table id="itemTable">
+        <thead>
+            <tr>
+                <th width="6%">編號</th>
+                <th width="32%">品名</th>
+                <th width="15%">規格</th>
+                <th width="10%">數量</th>
+                <th width="12%">單價(可不填)</th>
+                <th width="13%">金額(單價空白時可手動填)</th>
+                <th width="12%">備註</th>
+                <th width="8%">操作</th>
+            </tr>
+        </thead>
+        <tbody id="itemTbody">
+            <!-- 預設留空 -->
+        </tbody>
+        <tfoot>
+            <tr class="total-row">
+                <td colspan="5">合 計</td>
+                <td colspan="2" style="text-align: right; padding-right: 20px; color: #c53030;">
+                    $<span id="totalDisplay">0</span>
+                </td>
+                <td></td>
+            </tr>
+        </tfoot>
+    </table>
+    </div>
+
+    <!-- 4. 底部聯絡人區 (同樣可修改) -->
+    <div class="info-section" style="margin-bottom: 10px;">
+        <div class="form-group">
+            <label>聯絡人：</label>
+            <input type="text" id="contactPerson" value="鄭連春">
+        </div>
+        <div class="form-group">
+            <label>聯絡手機：</label>
+            <input type="text" id="mobile" value="0932-983137">
+        </div>
+    </div>
+
+    <div class="export-buttons" style="display: flex; gap: 10px; margin-top: 20px;">
+        <button type="button" class="btn btn-export" style="flex: 1; margin-top: 0;" onclick="exportToExcel()">📊 輸出 Excel</button>
+        <button type="button" class="btn btn-export" style="flex: 1; margin-top: 0; background-color: #2c5282;" onclick="exportToWord()">📄 輸出 Word</button>
+        <button type="button" class="btn btn-export" style="flex: 1; margin-top: 0; background-color: #6b46c1;" onclick="exportToImage()">🖼️ 輸出圖片(JPG)</button>
+    </div>
+</div>
+
+<script>
+    // 自動生成今天的民國年日期格式
+    const today = new Date();
+    const rocYear = today.getFullYear() - 1911;
+    document.getElementById("quoteDate").value = `${rocYear}年${today.getMonth() + 1}月${today.getDate()}日`;
+
+    // 開啟原生日曆選擇器（點日曆圖示按鈕觸發）
+    function openDatePicker() {
+        const picker = document.getElementById("quoteDatePicker");
+        if (picker.showPicker) {
+            // Chrome / Edge 等支援 showPicker()，直接跳出日曆
+            picker.showPicker();
+        } else {
+            // 舊版瀏覽器的備援方式
+            picker.focus();
+            picker.click();
+        }
+    }
+
+    // 使用者用日曆選好日期後，轉換成民國年格式寫回文字輸入框
+    // （寫回文字框而不是鎖住欄位，所以使用者之後仍可以直接手動修改文字）
+    function onDatePicked(dateStr) {
+        if (!dateStr) return;
+        const d = new Date(dateStr + "T00:00:00");
+        const rocY = d.getFullYear() - 1911;
+        document.getElementById("quoteDate").value = `${rocY}年${d.getMonth() + 1}月${d.getDate()}日`;
+    }
+
+    function reIndex() {
+        const rows = document.querySelectorAll("#itemTable tbody tr");
+        rows.forEach((row, index) => {
+            row.querySelector(".row-index").innerText = index + 1;
+        });
+    }
+
+    // 新增資料列 (支援單價留空)
+    function addRow(data = {}) {
+        const tbody = document.getElementById("itemTbody");
+        const tr = document.createElement("tr");
+        
+        // 如果單價是 0 且沒有特別輸入，畫面上就留空不顯示 0
+        const priceVal = (data.price === 0 || data.price === undefined) ? '' : data.price;
+
+        tr.innerHTML = `
+            <td class="row-index"></td>
+            <td><input type="text" class="p-name align-left" value="${data.name || ''}" placeholder="請輸入品名"></td>
+            <td><input type="text" class="p-spec" value="${data.spec || ''}"></td>
+            <td><input type="text" class="p-qty" value="${data.qty || '1台'}" oninput="calculateRow(this)"></td>
+            <td><input type="number" class="p-price" value="${priceVal}" placeholder="選填" oninput="calculateRow(this)"></td>
+            <td><input type="number" class="p-amount" value="${data.amount || ''}" placeholder="未填單價可手動輸入" oninput="updateTotal()"></td>
+            <td><input type="text" class="p-note" value="${data.note || ''}"></td>
+            <td><button type="button" class="btn btn-delete" onclick="deleteRow(this)">刪除</button></td>
+        `;
+        tbody.appendChild(tr);
+        reIndex();
+        
+        calculateRow(tr.querySelector('.p-qty'));
+    }
+
+    function deleteRow(button) {
+        button.closest("tr").remove();
+        reIndex();
+        updateTotal();
+    }
+
+    // 計算核心：修正——原本不管單價有沒有填都會覆蓋金額欄位（並設成 readonly），
+    // 導致單價留空時金額永遠是 0 且無法手動輸入。
+    // 現在改成：只有「單價有填」時才自動計算覆蓋金額；單價留空時金額欄位可自由手動輸入。
+    function calculateRow(input) {
+        const row = input.closest("tr");
+        const qtyText = row.querySelector(".p-qty").value;
+        const qtyParsed = parseFloat(qtyText.replace(/[^0-9.]/g, '')) || 0;
+        
+        const priceInput = row.querySelector(".p-price").value;
+        
+        if (priceInput !== '') {
+            const price = parseFloat(priceInput) || 0;
+            row.querySelector(".p-amount").value = Math.round(qtyParsed * price);
+        }
+        // 單價留空時，不動金額欄位，保留使用者手動輸入的值
+        updateTotal();
+    }
+
+    function updateTotal() {
+        let total = 0;
+        document.querySelectorAll(".p-amount").forEach(field => {
+            total += parseFloat(field.value) || 0;
+        });
+        document.getElementById("totalDisplay").innerText = total.toLocaleString();
+    }
+
+    // ================= EXCEL 動態取值匯出邏輯 =================
+    function exportToExcel() {
+        // 從畫面的輸入框「動態抓取」最新文字，改過什麼就匯出什麼！
+        const clientName = document.getElementById("clientName").value;
+        const quoteDate = document.getElementById("quoteDate").value;
+        const subClient = document.getElementById("subClient").value;
+        const address = document.getElementById("address").value;
+        const tel = document.getElementById("tel").value;
+        const fax = document.getElementById("fax").value;
+        const taxId = document.getElementById("taxId").value;
+        const contactPerson = document.getElementById("contactPerson").value;
+        const mobile = document.getElementById("mobile").value;
+
+        const excelData = [
+            ["", "", "報  價  單", "", "", "", ""], 
+            ["客戶：", clientName, "", "", "", "日期：", quoteDate],
+            ["", subClient, "", "", "", "TEL：", tel],
+            ["地址：", address, "", "", "", "Fax：", fax],
+            ["", "", "", "", "", "統編：", taxId],
+            ["", "", "", "", "", "", ""], 
+            ["編號", "品  名", "規格", "數量", "單價", "金額", "備註"] 
+        ];
+
+        const rows = document.querySelectorAll("#itemTable tbody tr");
+        let grandTotal = 0;
+
+        rows.forEach((row, idx) => {
+            const name = row.querySelector(".p-name").value;
+            const spec = row.querySelector(".p-spec").value;
+            const qty = row.querySelector(".p-qty").value;
+            const priceInput = row.querySelector(".p-price").value;
+            const price = priceInput === '' ? "" : parseFloat(priceInput) || 0;
+            const amount = parseFloat(row.querySelector(".p-amount").value) || 0;
+            const note = row.querySelector(".p-note").value;
+            
+            excelData.push([idx + 1, name, spec, qty, price, amount, note]);
+            grandTotal += amount;
+        });
+
+        excelData.push(["", "合計", "", "", "", grandTotal, ""]);
+        excelData.push(["", "", "", "", "", "", ""], ["", "", "", "", "", "", ""]); 
+        excelData.push(["聯絡人：", contactPerson, "", "手機：", mobile, "", ""]);
+
+        const ws = XLSX.utils.aoa_to_sheet(excelData);
+        
+        ws['!merges'] = [
+            { s: { r: 0, c: 2 }, e: { r: 0, c: 4 } }, 
+            { s: { r: 1, c: 1 }, e: { r: 1, c: 4 } }, 
+            { s: { r: 2, c: 1 }, e: { r: 2, c: 4 } }, 
+            { s: { r: 3, c: 1 }, e: { r: 3, c: 4 } }, 
+            { s: { r: 7 + rows.length, c: 1 }, e: { r: 7 + rows.length, c: 4 } }
+        ];
+
+        ws['!cols'] = [
+            { wch: 8 }, { wch: 38 }, { wch: 18 }, { wch: 10 }, { wch: 14 }, { wch: 16 }, { wch: 20 }
+        ];
+
+        for (let cell in ws) {
+            if (cell[0] === '!') continue;
+            const colLetter = cell.replace(/[0-9]/g, '');
+            if (colLetter === 'E' || colLetter === 'F') {
+                if(ws[cell].v && !isNaN(ws[cell].v)) {
+                    ws[cell].t = 'n';
+                    ws[cell].z = '"$"#,##0';
+                }
+            }
+        }
+
+        const wb = XLSX.utils.book_new();
+        XLSX.utils.book_append_sheet(wb, ws, "報價單明細");
+        XLSX.writeFile(wb, `${clientName || '客戶'}_報價單.xlsx`);
+    }
+
+    // 避免使用者輸入的文字被當成 HTML 標籤解析
+    function escapeHtml(str) {
+        const div = document.createElement('div');
+        div.innerText = str == null ? '' : str;
+        return div.innerHTML;
+    }
+
+    // ================= 共用：把畫面上的資料組成一份排版好的報價單 HTML =================
+    // Word 匯出跟 JPG 圖片匯出都共用這份內容，確保兩邊排版一致
+    function buildQuoteDocumentHTML() {
+        const clientName = document.getElementById("clientName").value;
+        const quoteDate = document.getElementById("quoteDate").value;
+        const subClient = document.getElementById("subClient").value;
+        const address = document.getElementById("address").value;
+        const tel = document.getElementById("tel").value;
+        const fax = document.getElementById("fax").value;
+        const taxId = document.getElementById("taxId").value;
+        const contactPerson = document.getElementById("contactPerson").value;
+        const mobile = document.getElementById("mobile").value;
+
+        const rows = document.querySelectorAll("#itemTable tbody tr");
+        let itemRowsHtml = '';
+        let grandTotal = 0;
+
+        rows.forEach((row, idx) => {
+            const name = row.querySelector(".p-name").value;
+            const spec = row.querySelector(".p-spec").value;
+            const qty = row.querySelector(".p-qty").value;
+            const priceInput = row.querySelector(".p-price").value;
+            const priceDisplay = priceInput === '' ? '' : Number(priceInput).toLocaleString();
+            const amount = parseFloat(row.querySelector(".p-amount").value) || 0;
+            const note = row.querySelector(".p-note").value;
+
+            grandTotal += amount;
+
+            itemRowsHtml += `
+                <tr>
+                    <td style="border:1px solid #999;padding:6px;text-align:center;">${idx + 1}</td>
+                    <td style="border:1px solid #999;padding:6px;text-align:center;">${escapeHtml(name)}</td>
+                    <td style="border:1px solid #999;padding:6px;text-align:center;">${escapeHtml(spec)}</td>
+                    <td style="border:1px solid #999;padding:6px;text-align:center;">${escapeHtml(qty)}</td>
+                    <td style="border:1px solid #999;padding:6px;text-align:center;">${priceDisplay}</td>
+                    <td style="border:1px solid #999;padding:6px;text-align:center;">${amount.toLocaleString()}</td>
+                    <td style="border:1px solid #999;padding:6px;text-align:center;">${escapeHtml(note)}</td>
+                </tr>`;
+        });
+
+        return `
+            <div style="font-family:'Microsoft JhengHei',Arial,sans-serif;width:720px;padding:30px;background:#ffffff;color:#1a202c;box-sizing:border-box;">
+                <h2 style="text-align:center;letter-spacing:10px;margin:0 0 20px 0;font-size:24px;">報 價 單</h2>
+                <table style="width:100%;border-collapse:collapse;margin-bottom:14px;font-size:13px;border:none;">
+                    <tr>
+                        <td style="width:64px;padding:3px 0;text-align:center;border:none;"><b>客戶：</b></td>
+                        <td colspan="3" style="padding:3px 0;text-align:left;border:none;">${escapeHtml(clientName)}</td>
+                        <td style="width:48px;padding:3px 0;text-align:center;border:none;"><b>日期：</b></td>
+                        <td style="padding:3px 0;text-align:left;border:none;">${escapeHtml(quoteDate)}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:3px 0;border:none;"></td>
+                        <td colspan="3" style="padding:3px 0;text-align:left;border:none;">${escapeHtml(subClient)}</td>
+                        <td style="padding:3px 0;text-align:center;border:none;"><b>TEL：</b></td>
+                        <td style="padding:3px 0;text-align:left;border:none;">${escapeHtml(tel)}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:3px 0;text-align:center;border:none;"><b>地址：</b></td>
+                        <td colspan="3" style="padding:3px 0;text-align:left;border:none;">${escapeHtml(address)}</td>
+                        <td style="padding:3px 0;text-align:center;border:none;"><b>Fax：</b></td>
+                        <td style="padding:3px 0;text-align:left;border:none;">${escapeHtml(fax)}</td>
+                    </tr>
+                    <tr>
+                        <td style="padding:3px 0;border:none;"></td>
+                        <td colspan="3" style="padding:3px 0;border:none;"></td>
+                        <td style="padding:3px 0;text-align:center;border:none;"><b>統編：</b></td>
+                        <td style="padding:3px 0;text-align:left;border:none;">${escapeHtml(taxId)}</td>
+                    </tr>
+                </table>
+                <table style="width:100%;border-collapse:collapse;font-size:13px;">
+                    <thead>
+                        <tr style="background:#f0f0f0;">
+                            <th style="border:1px solid #999;padding:6px;">編號</th>
+                            <th style="border:1px solid #999;padding:6px;">品名</th>
+                            <th style="border:1px solid #999;padding:6px;">規格</th>
+                            <th style="border:1px solid #999;padding:6px;">數量</th>
+                            <th style="border:1px solid #999;padding:6px;">單價</th>
+                            <th style="border:1px solid #999;padding:6px;">金額</th>
+                            <th style="border:1px solid #999;padding:6px;">備註</th>
+                        </tr>
+                    </thead>
+                    <tbody>${itemRowsHtml}</tbody>
+                    <tfoot>
+                        <tr>
+                            <td colspan="5" style="border:1px solid #999;padding:6px;text-align:center;background:#fffaf0;"><b>合 計</b></td>
+                            <td style="border:1px solid #999;padding:6px;text-align:center;background:#fffaf0;color:#c53030;"><b>$${grandTotal.toLocaleString()}</b></td>
+                            <td style="border:1px solid #999;padding:6px;background:#fffaf0;"></td>
+                        </tr>
+                    </tfoot>
+                </table>
+                <table style="width:100%;margin-top:16px;font-size:13px;border:none;border-collapse:collapse;">
+                    <tr>
+                        <td style="width:64px;padding:3px 0;text-align:center;border:none;"><b>聯絡人：</b></td>
+                        <td style="padding:3px 0;text-align:left;border:none;">${escapeHtml(contactPerson)}</td>
+                        <td style="width:80px;padding:3px 0;text-align:center;border:none;"><b>聯絡手機：</b></td>
+                        <td style="padding:3px 0;text-align:left;border:none;">${escapeHtml(mobile)}</td>
+                    </tr>
+                </table>
+            </div>`;
+    }
+
+    // ================= 輸出成 Word (.doc) =================
+    // 用 Word 認得的 HTML 格式包裝後存成 .doc，Word / WPS / LibreOffice 都能直接開啟編輯
+    function exportToWord() {
+        const clientName = document.getElementById("clientName").value || '客戶';
+        const contentHtml = buildQuoteDocumentHTML();
+
+        const fullHtml = `<html xmlns:o='urn:schemas-microsoft-com:office:office' xmlns:w='urn:schemas-microsoft-com:office:word' xmlns='http://www.w3.org/TR/REC-html40'>
+<head><meta charset='utf-8'><title>報價單</title></head>
+<body>${contentHtml}</body>
+</html>`;
+
+        const blob = new Blob(['\ufeff', fullHtml], { type: 'application/msword' });
+        const link = document.createElement('a');
+        link.href = URL.createObjectURL(blob);
+        link.download = `${clientName}_報價單.doc`;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
+        URL.revokeObjectURL(link.href);
+    }
+
+    // ================= 輸出成圖片 (JPG) =================
+    function exportToImage() {
+        if (typeof html2canvas === 'undefined') {
+            alert('圖片繪製套件載入失敗，請確認網路連線正常後重新整理頁面再試一次。');
+            return;
+        }
+
+        const clientName = document.getElementById("clientName").value || '客戶';
+        const contentHtml = buildQuoteDocumentHTML();
+
+        // 建立一個畫面外的容器來畫圖，不影響現有頁面
+        const container = document.createElement('div');
+        container.style.position = 'fixed';
+        container.style.left = '-9999px';
+        container.style.top = '0';
+        container.innerHTML = contentHtml;
+        document.body.appendChild(container);
+
+        html2canvas(container.firstElementChild, { scale: 2, backgroundColor: '#ffffff' }).then(canvas => {
+            const link = document.createElement('a');
+            link.download = `${clientName}_報價單.jpg`;
+            link.href = canvas.toDataURL('image/jpeg', 0.95);
+            document.body.appendChild(link);
+            link.click();
+            document.body.removeChild(link);
+            document.body.removeChild(container);
+        }).catch(err => {
+            alert('圖片匯出失敗：' + err.message);
+            document.body.removeChild(container);
+        });
+    }
+</script>
+
+</body>
+</html>
